@@ -14,8 +14,17 @@ var inputMap = $InputTileMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	var tilesToConstraints = parseInputTileMap(inputMap)
-	var wave = initializeWave(tilesToConstraints, inputMap)
+	
+	# Acquire Wave Function Collapse Inputs
+	var waveSize = getWaveSize(inputMap)
+	var parseResults = parseInputTileMap(inputMap)
+	print(parseResults.keys())
+	var tileFrequencies = parseResults.get("tilesToFrequencies")
+	var tileConstraints = parseResults.get("tilesToConstraints")
+	var tileWeights = getTileProbabilityWeights(tileFrequencies, waveSize)
+	
+	# Run Algorithm
+	var wave = initializeWave(tileConstraints, inputMap)
 	
 	print(wave)
 	
@@ -24,8 +33,16 @@ func _ready():
 func _process(delta):
 	pass
 	
+func getWaveSize(map: TileMap) -> int:
+	var rect = map.get_used_rect()
+	var mapWidth = rect.size.x
+	var mapHeight = rect.size.y 
+	return mapWidth * mapHeight
+	
+	
 func parseInputTileMap(map : TileMap):
-	var tilesToConstraints : Dictionary
+	var tilesToConstraints : Dictionary 
+	var tilesToFrequency : Dictionary = {} # the number of times each tile type (atlasCoords) appears on the map
 	var rect = map.get_used_rect()
 	var mapWidth = rect.size.x
 	var mapHeight = rect.size.y 
@@ -34,6 +51,11 @@ func parseInputTileMap(map : TileMap):
 		for y in mapHeight: # height
 
 			var tileId = map.get_cell_atlas_coords(LAYER_ZERO, Vector2i(x,y))
+			# record frequency
+			if tilesToFrequency.has(tileId):
+				tilesToFrequency[tileId] += 1
+			else:
+				tilesToFrequency[tileId] = 1
 
 			# initialize constraint rules array for tile type if one does not exist yet
 			if !tilesToConstraints.has(tileId):
@@ -56,12 +78,12 @@ func parseInputTileMap(map : TileMap):
 				else:
 					tilesToConstraints[tileId].merge({constraint: true})
 
-	return tilesToConstraints #TODO test addition of tiles
+	return {"tilesToConstraints": tilesToConstraints, "tilesToFrequencies": tilesToFrequency}
 	
 	# The output array is known as a "wave" with the dimensions of a coefficient matrix. 
 	# The coefficient matrix is described in the algorithm as all possible states for an NxM region of pixels. 
-	# For the even simpler tiled model, a region is one tile on the map, so the possibility state is simply the number of tiles
-func calculateCoefficientMatrix(numTileTypesUsed: int):
+	# For the even simpler tiled model, a region is one tile on the map, so the possibility state is simply the number of tile types
+func calculateCoefficient(numTileTypesUsed: int):
 	var coefficient = numTileTypesUsed
 	print("Coefficient is:", coefficient)
 	return coefficient
@@ -72,21 +94,43 @@ func initializeWave(tilesToConstraints: Dictionary, inputMap: TileMap):
 	var mapHeight = rect.size.y 
 	
 	var wave = createMatrix(mapWidth, mapHeight)
-	var matrixCoefficient = calculateCoefficientMatrix(tilesToConstraints.size())
-	wave.fill(matrixCoefficient)
+	var matrixCoefficient = calculateCoefficient(tilesToConstraints.size())
+	wave.fill(tilesToConstraints)
 
 	return wave
 	
-func createMatrix(width, height) -> Array[Variant]: 
+func createMatrix(width: int, height: int) -> Array[Variant]: 
 	var matrix = Array()
 	matrix.resize(width * height)
 	return matrix
 
-func idx2DtoIdx1D(x, y, width) -> int:
+func idx2DtoIdx1D(x: int, y: int, width: int) -> int:
 	var index = (x * width) + y
 	return index
 
-func getRandomIdx(waveSize) -> int:
-	return randi() % (waveSize - 1)
+func getRandomIdx(waveSize: int) -> int:
+	return randi() % waveSize
 
+###
+# Returns an array of tileId -> weight kvps, sorted from highest weight (most frequent) to lowest weight (least frequent)
+###
+func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Array:
+	var tileWeights = []
+	for key in tileFrequencies:
+		var value : float = tileFrequencies[key]
+		var weight : float = snappedf(value / float(waveSize), .01)
+		var tile = { "tile": key, "weight": weight }
+		tileWeights.append(tile)
+	
+	# sort weights such that highest weight is first
+	tileWeights.sort_custom(func(a, b): return a["weight"] > b["weight"])
+	#TODO add weights and throw error if != 100
+	return tileWeights
+
+#func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx: int) -> float:
+	## get the sum of weights of all remaining tile types
+	#var weight
+	#for item in wave:
+		#
+	#
 
