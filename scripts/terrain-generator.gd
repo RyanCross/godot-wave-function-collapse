@@ -26,9 +26,8 @@ func _ready():
 	# Run Algorithm
 	var wave = initializeWave(tileConstraints, inputMap)
 	
-	print(wave)
+	print(getShannonEntropyForCell(wave, tileWeights, 0))
 	
-
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
 	pass
@@ -127,10 +126,21 @@ func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Ar
 	#TODO add weights and throw error if != 100
 	return tileWeights
 
-#func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx: int) -> float:
-	## get the sum of weights of all remaining tile types
-	#var weight
-	#for item in wave:
-		#
-	#
-
+# Entropy is the measure of disorder or uncertainty, broadly, this method uses the Shannon Entropy equation to calculate the entropy of a given cell in the wave.
+func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx) -> float:
+	# get the sum of weights of all remaining tile types
+	var weightSum : float
+	var weightSumLogWeights : float
+	for remainingTileChoice in wave[cellIdx]:
+			var weightMapping = tileWeights.filter(
+				(func(tile): 
+					return tile["tile"] == remainingTileChoice))[0]
+			var weight = weightMapping["weight"]
+			weightSum += weight
+			weightSumLogWeights += weight * log(weight)
+	
+	var shannon_entropy_for_cell : float = log(weightSum) - (weightSumLogWeights / weightSum)
+	print("Cell remaining choices WeightSum", cellIdx, ": ", weightSum)
+	print("Cell ", cellIdx, " entropy: ", shannon_entropy_for_cell)
+	
+	return shannon_entropy_for_cell
