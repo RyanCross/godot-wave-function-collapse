@@ -10,7 +10,7 @@ const EMPTY_TILE := Vector2i(-1,-1)
 const LAYER_ZERO := 0
 
 @onready
-var inputMap = $InputTileMap
+var inputMap = $InputMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -25,19 +25,19 @@ func _ready():
 	
 	# Run Algorithm
 	var wave = initializeWave(tileConstraints, inputMap)
+	var lowestEntropyCells = processWave(wave, tileWeights)
 	
 	print(getShannonEntropyForCell(wave, tileWeights, 0))
 	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
 	pass
-	
+
 func getWaveSize(map: TileMap) -> int:
 	var rect = map.get_used_rect()
 	var mapWidth = rect.size.x
 	var mapHeight = rect.size.y 
 	return mapWidth * mapHeight
-	
 	
 func parseInputTileMap(map : TileMap):
 	var tilesToConstraints : Dictionary 
@@ -107,9 +107,6 @@ func idx2DtoIdx1D(x: int, y: int, width: int) -> int:
 	var index = (x * width) + y
 	return index
 
-func getRandomIdx(waveSize: int) -> int:
-	return randi() % waveSize
-
 ###
 # Returns an array of tileId -> weight kvps, sorted from highest weight (most frequent) to lowest weight (least frequent)
 ###
@@ -126,7 +123,10 @@ func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Ar
 	#TODO add weights and throw error if != 100
 	return tileWeights
 
-# Entropy is the measure of disorder or uncertainty, broadly, this method uses the Shannon Entropy equation to calculate the entropy of a given cell in the wave.
+###
+# Entropy is the measure of disorder or uncertainty, broadly, this method uses 
+# the Shannon Entropy equation to calculate the entropy of a given cell in the wave.
+### 
 func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx) -> float:
 	# get the sum of weights of all remaining tile types
 	var weightSum : float
@@ -144,3 +144,44 @@ func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx) -> float
 	print("Cell ", cellIdx, " entropy: ", shannon_entropy_for_cell)
 	
 	return shannon_entropy_for_cell
+
+# Get array of all lowest entropy cells
+func getLowestEntropyCells(wave: Array, tileWeights: Array) -> Array:	
+		# what if no cells found?
+		# what if start of process
+	var lowestEntropyCells = []
+	for i in wave.size():
+		var cell = { "wavePos": i, "entropy": getShannonEntropyForCell(wave, tileWeights, i) }
+		if lowestEntropyCells.size() == 0:
+			lowestEntropyCells.append(cell)
+		else:
+			var lowestEntropy : float = lowestEntropyCells.back()["entropy"]
+			if cell["entropy"] < lowestEntropy:
+				# new lowest entropy found, wipe array
+				lowestEntropyCells = []
+				lowestEntropyCells.append(cell)
+			elif cell["entropy"] == lowestEntropy:
+				lowestEntropyCells.append(cell)
+	
+	return lowestEntropyCells
+	
+# Collapses the entire wave function (tile matrix), and returns either the resulting array, or the contradiction value: -1
+# A contradiction means we've hit a point where not all cells can be collapsed into a valid layout, and thus the wave collapsing must begin anew
+func processWave(wave: Array, tileWeights: Array):
+	# step 1: collect cells with lowest entropy
+	var lowestEntropyCells = getLowestEntropyCells(wave, tileWeights)
+	if lowestEntropyCells.size() == 0:
+		# done collapsing
+		return wave;
+	# step 2: select one at random
+	var selectIdx = randi() % lowestEntropyCells.size()
+	var selectionCellPos = lowestEntropyCells[selectIdx]["wavePos"]
+	# after selecting, reset lowestEntropyCells for next loop
+	lowestEntropyCells = []
+	
+
+	# step 3: collapse that cell
+		
+	# step 4: propagate collapse
+
+func collapse
