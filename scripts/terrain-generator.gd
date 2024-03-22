@@ -56,7 +56,7 @@ func parseInputTileMap(map : TileMap):
 			else:
 				tilesToFrequency[tileId] = 1
 
-			# initialize constraint rules array for tile type if one does not exist yet
+			# initialize constraint rules dictionary for tile type if one does not exist yet
 			if !tilesToConstraints.has(tileId):
 				var constraintTuples = {}
 				tilesToConstraints[tileId] = constraintTuples
@@ -70,12 +70,9 @@ func parseInputTileMap(map : TileMap):
 				if targetCell.x >= mapWidth or targetCell.y >= mapHeight:
 					continue
 				# Sets don't exist in Godot, so we'll use a dict instead
-				var targetTile = map.get_cell_atlas_coords(LAYER_ZERO, targetCell)
-				var constraint = { "local" : tileId, "allowed": targetTile, "direction" : DIRECTIONS[i]} 
-				if tilesToConstraints.size() == 0:
-					tilesToConstraints[constraint] = constraint
-				else:
-					tilesToConstraints[tileId].merge({constraint: true})
+				var targetTileId = map.get_cell_atlas_coords(LAYER_ZERO, targetCell)
+				var constraint = { "local" : tileId, "allowed": targetTileId, "direction" : DIRECTIONS[i]} 
+				tilesToConstraints[tileId].merge({constraint: true})
 
 	return {"tilesToConstraints": tilesToConstraints, "tilesToFrequencies": tilesToFrequency}
 	
@@ -108,7 +105,7 @@ func idx2DtoIdx1D(x: int, y: int, width: int) -> int:
 	return index
 
 ###
-# Returns an array of tileId -> weight kvps, sorted from highest weight (most frequent) to lowest weight (least frequent)
+# Returns an array of tileId -> weight kvps, sorted by frequency (highest weight) in descending order
 ###
 func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Array:
 	var tileWeights = []
@@ -173,15 +170,51 @@ func processWave(wave: Array, tileWeights: Array):
 	if lowestEntropyCells.size() == 0:
 		# done collapsing
 		return wave;
+		
 	# step 2: select one at random
 	var selectIdx = randi() % lowestEntropyCells.size()
-	var selectionCellPos = lowestEntropyCells[selectIdx]["wavePos"]
+	var cellPos = lowestEntropyCells[selectIdx]["wavePos"]
 	# after selecting, reset lowestEntropyCells for next loop
 	lowestEntropyCells = []
 	
-
 	# step 3: collapse that cell
+	print("Collapsing Cell: ", cellPos )
+#	collapse(wave[cellPos])
 		
 	# step 4: propagate collapse
+	
+# Selects a tile at random from the cells remaining choices using weighted randomness based on frequency
+func collapse(wave: Array, tileWeights: Array, cellPos: int):
+	var availableTileChoices : Array = wave[cellPos].keys()
+	
+	# Create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them
+	# This creates an array of remaining choices that is still ordered most to least frequent
+	var tileWeightsRemainingChoices = tileWeights.duplicate()
+	var remainingChoicesWeightSum : float = 0
+	for record in tileWeightsRemainingChoices:
+		if availableTileChoices.find(record["tile"]) == -1:
+			tileWeightsRemainingChoices.erase(record)
+		else:
+			remainingChoicesWeightSum += record["weight"]
 
-func collapse
+	var rval = randf_range(0, remainingChoicesWeightSum) # TODO between 0 and weightSumRemainingChoices
+
+	
+	#create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them, this maintains the order of most to least frequent
+	#define rval range = sum of all weights remaining in tileweights
+	#roll rval 
+	# loop through weights, starting at 0
+	# compare to idx 0, if val lt weightSum (currently just weights[0]), select that tile
+	# else increment idx, add weights[idx] to weightSum, 
+	# repeat until tile chosen or an error occurs
+
+	#  What Data Working With?
+	#   var tile = { "tile": key, "weight": weight }
+	# 	var constraint = { "local" : tileId, "allowed": targetTileId, "direction" : DIRECTIONS[i]} 
+	#   wave[cellPos] tileId -> Dict[constraint -> true] # this should be an array
+	
+	# What is the Expected Output? 	output == selection made, wave[CellPos] goes from Dict to single Vector2i
+	# How can I make this less abstract, create some example data?
+
+	pass
+	
