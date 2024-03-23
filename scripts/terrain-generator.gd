@@ -178,17 +178,26 @@ func processWave(wave: Array, tileWeights: Array):
 	lowestEntropyCells = []
 	
 	# step 3: collapse that cell
-	print("Collapsing Cell: ", cellPos )
-#	collapse(wave[cellPos])
+	print("Collapsing Cell: ", cellPos)
+	collapse(wave, tileWeights, cellPos)
 		
 	# step 4: propagate collapse
 	
-# Selects a tile at random from the cells remaining choices using weighted randomness based on frequency
+###
+# Selects a tile at random from the cell's remaining choices using weighted 
+# randomness based on frequency of tiles as they appeared in the input map. Returns 
+# 0 if a selection could not be made due to error or reaching contradiction
+###
 func collapse(wave: Array, tileWeights: Array, cellPos: int):
 	var availableTileChoices : Array = wave[cellPos].keys()
+	var selection = 0
+	
+	# No choices available, contradiction reached
+	if availableTileChoices.size() == 0:
+		return 0
 	
 	# Create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them
-	# This creates an array of remaining choices that is still ordered most to least frequent
+	# This creates an array weights for the remaining choices that is still ordered most to least frequent
 	var tileWeightsRemainingChoices = tileWeights.duplicate()
 	var remainingChoicesWeightSum : float = 0
 	for record in tileWeightsRemainingChoices:
@@ -197,24 +206,19 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 		else:
 			remainingChoicesWeightSum += record["weight"]
 
-	var rval = randf_range(0, remainingChoicesWeightSum) # TODO between 0 and weightSumRemainingChoices
-
-	
-	#create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them, this maintains the order of most to least frequent
-	#define rval range = sum of all weights remaining in tileweights
-	#roll rval 
-	# loop through weights, starting at 0
-	# compare to idx 0, if val lt weightSum (currently just weights[0]), select that tile
-	# else increment idx, add weights[idx] to weightSum, 
-	# repeat until tile chosen or an error occurs
-
-	#  What Data Working With?
-	#   var tile = { "tile": key, "weight": weight }
-	# 	var constraint = { "local" : tileId, "allowed": targetTileId, "direction" : DIRECTIONS[i]} 
-	#   wave[cellPos] tileId -> Dict[constraint -> true] # this should be an array
-	
-	# What is the Expected Output? 	output == selection made, wave[CellPos] goes from Dict to single Vector2i
-	# How can I make this less abstract, create some example data?
-
-	pass
-	
+	# Bound the limit of the random value the sum of the remaining choices
+	var rval = randf_range(0, remainingChoicesWeightSum)
+	var weightSum = 0;
+	var i = 0;
+	rval = 1
+	for record in tileWeightsRemainingChoices:
+		weightSum += record["weight"]
+		if rval < weightSum or (rval <= weightSum and i == tileWeightsRemainingChoices.size() - 1): # weightSum is inclusive if last element
+			var choiceIdx = availableTileChoices.find(record["tile"]) 
+			assert(choiceIdx != -1, "Selected tile choice not found in available selection during collapse")
+			selection = availableTileChoices[choiceIdx]
+			break			
+		i += 1
+		
+	assert(selection != 0, "No tile was selected after iterating through choices")
+	return selection
