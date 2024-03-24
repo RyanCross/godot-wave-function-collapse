@@ -14,11 +14,9 @@ var inputMap = $InputMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	
 	# Acquire Wave Function Collapse Inputs
 	var waveSize = getWaveSize(inputMap)
 	var parseResults = parseInputTileMap(inputMap)
-	print(parseResults.keys())
 	var tileFrequencies = parseResults.get("tilesToFrequencies")
 	var tileConstraints = parseResults.get("tilesToConstraints")
 	var tileWeights = getTileProbabilityWeights(tileFrequencies, waveSize)
@@ -32,6 +30,67 @@ func _ready():
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
 	pass
+	
+# How do we generate the constraints to remove after collapsing a tile?
+func generateConstraintsToRemove():
+	pass
+	# TODO confirm direction is U/D/L/R on the tilemap grid in x,y coordinates
+	# TODO create a function to return the inverseDirection (so that constraints generated are from the perspective of the neighboring tile)
+	# TODO handle out of bounds
+	# we have the collapsed tile choice: lets use 9,2 as an example.
+	# { "allowed": 9,2,
+	# "direction": dirFromNeighborToThisTile - so inverse dir of target neighbor: propagating left? dir is right., 
+	# "local": the key for the constraint tuples we are looking at (tile type)
+	# }
+	# what im struggling with is lets say we generate a constraint for the neighbor to the left { allowed: (9,2), direction: (1, 0), local: (9,2) }
+	# we're asking the constraint dictionary which is whats allowed for EACH tile type and saying HEY: can grounds be to the right of other grounds?
+	# if not, remove the ENTRY entirely.
+	# remember were working with whats allowed not was disallowed, so as soon as we know what MUST be possible, we can reach a consensus for neighbors and repeat.
+	# 
+	###
+	# this might fit best as a recursive function? whats the base case?: if tileTypes.size() > 1 #check if 0 (contradiction), then stop.
+	# Propagate(partialCon: {"allowed": (9,2), "direction": inverseDir([right])}, wave, cellToPropagatePos)
+
+### 
+# Invert a direction.. e.g. LEFT to RIGHT, DOWN to UP. 
+# Used for generating constraint information from the perspective of a neighboring tile
+###
+func invertDirection(dir: Vector2i):
+	return Vector2i(dir.x * -1, dir.y * -1)
+
+###
+#
+###
+func propagate(wave: Array, cellToPropagatePos: int, partialConstraint: Variant):
+	var remainingTileChoices = wave[cellToPropagatePos]
+	# base case 1: already collapsed, do not need to propagate further on this cell
+	if(remainingTileChoices.keys().size() == 1):
+		return 1
+	# base case 2: there are no options left, contradiction reached.
+	if(remainingTileChoices.keys().size() == 0):
+		return -1
+		
+	# actual logic of removing constraints, updating wave
+	var tileChoicesToRemove = []
+	for tile in remainingTileChoices.keys():
+		var constraint = partialConstraint;
+		constraint["local"] = tile	
+		# if allow rule (constraint) is not present, then this tile choice is now invalid
+		if(!remainingTileChoices[tile].has(constraint)):
+			tileChoicesToRemove.append(tile)
+			# propagate here? at the point of reducing the problem space?, no we propagate at the point of collapse, as this is the only thing that generates a constraint
+	
+	#TODO if now collapsed... propagate, otherwise stop?
+	# or rather, if number of choices has CHANGED, propagate?
+	# left
+	
+	# right
+	
+	# up
+	
+	# down
+	
+	
 
 func getWaveSize(map: TileMap) -> int:
 	var rect = map.get_used_rect()
@@ -46,10 +105,14 @@ func parseInputTileMap(map : TileMap):
 	var mapWidth = rect.size.x
 	var mapHeight = rect.size.y 
 	
+	#TODO could speed this up by iterating as a 1D array
 	for x in mapWidth: # width
 		for y in mapHeight: # height
 
 			var tileId = map.get_cell_atlas_coords(LAYER_ZERO, Vector2i(x,y))
+			var i1D = idx2DToIdx1D(x, y, mapWidth)
+			var i2D = idx1DToidx2D(i1D, mapWidth, mapHeight)
+			
 			# record frequency
 			if tilesToFrequency.has(tileId):
 				tilesToFrequency[tileId] += 1
@@ -76,9 +139,11 @@ func parseInputTileMap(map : TileMap):
 
 	return {"tilesToConstraints": tilesToConstraints, "tilesToFrequencies": tilesToFrequency}
 	
-	# The output array is known as a "wave" with the dimensions of a coefficient matrix. 
-	# The coefficient matrix is described in the algorithm as all possible states for an NxM region of pixels. 
-	# For the even simpler tiled model, a region is one tile on the map, so the possibility state is simply the number of tile types
+###
+# The output array is known as a "wave" with the dimensions of a coefficient matrix. 
+# The coefficient matrix is described in the algorithm as all possible states for an NxM region of pixels. 
+# For the even simpler tiled model, a region is one tile on the map, so the possibility state is simply the number of tile types
+###
 func calculateCoefficient(numTileTypesUsed: int):
 	var coefficient = numTileTypesUsed
 	print("Coefficient is:", coefficient)
@@ -100,10 +165,15 @@ func createMatrix(width: int, height: int) -> Array[Variant]:
 	matrix.resize(width * height)
 	return matrix
 
-func idx2DtoIdx1D(x: int, y: int, width: int) -> int:
+func idx2DToIdx1D(x: int, y: int, width: int) -> int:
 	var index = (x * width) + y
 	return index
 
+##### understand how 1d to 2d conversion works
+func idx1DToidx2D(i: int, width: int, height: int) -> Vector2i:
+	var x : int = floor(i / width)
+	var y : int = i % width
+	return Vector2i(x, y)
 ###
 # Returns an array of tileId -> weight kvps, sorted by frequency (highest weight) in descending order
 ###
