@@ -4,7 +4,7 @@
 [ext_resource type="TileSet" uid="uid://dru5xtrdc4fjm" path="res://resources/roguelikeTileSet.tres" id="1_yvkr3"]
 [ext_resource type="Script" path="res://scripts/InputTileMap.gd" id="2_e4yp6"]
 
-[node name="TerrainGeneration" type="Node2D"]
+[node name="TerrainGenerator" type="Node2D"]
 script = ExtResource("1_ec7u0")
 
 [node name="Camera2D" type="Camera2D" parent="."]

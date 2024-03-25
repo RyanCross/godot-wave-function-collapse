@@ -1,14 +1,15 @@
 extends Node2D
-#const ConstraintTuple = preload("constraint-tuple.gd")
 
 const LEFT : Vector2i = Vector2i(-1, 0)
 const RIGHT : Vector2i = Vector2i(1, 0)
 const DOWN : Vector2i = Vector2i(0, -1)
 const UP : Vector2i = Vector2i(0, 1)
-var DIRECTIONS : Array = [LEFT, RIGHT, DOWN, UP]
+const DIRECTIONS : Array = [LEFT, RIGHT, DOWN, UP]
 const EMPTY_TILE := Vector2i(-1,-1)
 const LAYER_ZERO := 0
 
+var BOUNDS_X : int
+var BOUNDS_Y : int
 @onready
 var inputMap = $InputMap
 
@@ -30,26 +31,6 @@ func _ready():
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
 	pass
-	
-# How do we generate the constraints to remove after collapsing a tile?
-func generateConstraintsToRemove():
-	pass
-	# TODO confirm direction is U/D/L/R on the tilemap grid in x,y coordinates
-	# TODO create a function to return the inverseDirection (so that constraints generated are from the perspective of the neighboring tile)
-	# TODO handle out of bounds
-	# we have the collapsed tile choice: lets use 9,2 as an example.
-	# { "allowed": 9,2,
-	# "direction": dirFromNeighborToThisTile - so inverse dir of target neighbor: propagating left? dir is right., 
-	# "local": the key for the constraint tuples we are looking at (tile type)
-	# }
-	# what im struggling with is lets say we generate a constraint for the neighbor to the left { allowed: (9,2), direction: (1, 0), local: (9,2) }
-	# we're asking the constraint dictionary which is whats allowed for EACH tile type and saying HEY: can grounds be to the right of other grounds?
-	# if not, remove the ENTRY entirely.
-	# remember were working with whats allowed not was disallowed, so as soon as we know what MUST be possible, we can reach a consensus for neighbors and repeat.
-	# 
-	###
-	# this might fit best as a recursive function? whats the base case?: if tileTypes.size() > 1 #check if 0 (contradiction), then stop.
-	# Propagate(partialCon: {"allowed": (9,2), "direction": inverseDir([right])}, wave, cellToPropagatePos)
 
 ### 
 # Invert a direction.. e.g. LEFT to RIGHT, DOWN to UP. 
@@ -59,38 +40,58 @@ func invertDirection(dir: Vector2i):
 	return Vector2i(dir.x * -1, dir.y * -1)
 
 ###
-#
+# Builds the "allowed" and "direction" portions of a tile constraint to be propagated to a tile,
+# leaving "local" to be whatever neighboring tile option we happen to be checking.  The direction 
+# rule is always from the PERSPECTIVE of the cell we are passing the constraint to. This means the 
+# direction is the inverted direction of collapsed tile (current cell) -> neighbor to propagate to.
 ###
-func propagate(wave: Array, cellToPropagatePos: int, partialConstraint: Variant):
+func buildPartialConstraint(collapsedCellsTileChoice: Vector2i, directionOfNeighbor: Vector2i):
+	return { "allowed": collapsedCellsTileChoice, "direction": invertDirection(directionOfNeighbor)}
+
+###
+#	Ex call: Propagate(partialCon: {"allowed": (9,2), "direction": inverseDir([right])}, wave, cellToPropagatePos)
+#   Recursively generates constraints for the current cell and propagates any collapses as a result 
+#   of constriant checking to neighboring cells. This results in the wave's entropy (available choices 
+#   for each cell) lowering any time a new cell is collapsed.
+###
+func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Variant):
+	
+	# base case 1: a propagation call has resulted in a contradiction
+	if(wave == -1):
+		return wave
+	
 	var remainingTileChoices = wave[cellToPropagatePos]
-	# base case 1: already collapsed, do not need to propagate further on this cell
-	if(remainingTileChoices.keys().size() == 1):
-		return 1
-	# base case 2: there are no options left, contradiction reached.
-	if(remainingTileChoices.keys().size() == 0):
-		return -1
+	# base case 2: already collapsed, do not need to propagate further on this cell
+	if(typeof(remainingTileChoices) == TYPE_VECTOR2I):
+		return wave
 		
-	# actual logic of removing constraints, updating wave
-	var tileChoicesToRemove = []
-	for tile in remainingTileChoices.keys():
-		var constraint = partialConstraint;
-		constraint["local"] = tile	
-		# if allow rule (constraint) is not present, then this tile choice is now invalid
-		if(!remainingTileChoices[tile].has(constraint)):
-			tileChoicesToRemove.append(tile)
-			# propagate here? at the point of reducing the problem space?, no we propagate at the point of collapse, as this is the only thing that generates a constraint
-	
-	#TODO if now collapsed... propagate, otherwise stop?
-	# or rather, if number of choices has CHANGED, propagate?
-	# left
-	
-	# right
-	
-	# up
-	
-	# down
-	
-	
+	elif(typeof(remainingTileChoices) == TYPE_DICTIONARY):	
+		# actual logic of removing constraints, updating wave
+		var tileChoicesToKeep = []
+		
+		#TODO verify this is correct behavior #probably need to do remainingTileChoices[tile]
+		for tile in remainingTileChoices.keys():
+			var constraint = partialConstraint.duplicate(true);
+			constraint["local"] = tile
+			# if allow rule (constraint) is not present, then this tile choice is now invalid
+			if(remainingTileChoices[tile].has(constraint)):
+				tileChoicesToKeep.append(remainingTileChoices[tile])
+		
+		# base case 3: there are no options left for this cell, contradiction reached.
+		if(tileChoicesToKeep.size() == 0):
+			wave = -1
+			return wave
+		# base case 4: there is more than one option remaining, we are done propagating down this path
+		if(tileChoicesToKeep.size() > 1):
+			return wave
+		# recursion case 1: a new cell has been collapsed
+		if(tileChoicesToKeep.size() == 1):
+			wave[cellToPropagatePos] = tileChoicesToKeep[0]
+			# TODO implement bounds checks
+			# TODO Propagate the collapse in the form of passing a new partialConstraint to neighbors
+			#  in each direction that is not out of bounds.	
+	else:
+		assert(false, "An unexpected error occurred during propagation")
 
 func getWaveSize(map: TileMap) -> int:
 	var rect = map.get_used_rect()
@@ -134,7 +135,7 @@ func parseInputTileMap(map : TileMap):
 					continue
 				# Sets don't exist in Godot, so we'll use a dict instead
 				var targetTileId = map.get_cell_atlas_coords(LAYER_ZERO, targetCell)
-				var constraint = { "local" : tileId, "allowed": targetTileId, "direction" : DIRECTIONS[i]} 
+				var constraint = { "allowed" : targetTileId, "direction" : DIRECTIONS[i], "local" : tileId, } 
 				tilesToConstraints[tileId].merge({constraint: true})
 
 	return {"tilesToConstraints": tilesToConstraints, "tilesToFrequencies": tilesToFrequency}
@@ -250,8 +251,12 @@ func processWave(wave: Array, tileWeights: Array):
 	# step 3: collapse that cell
 	print("Collapsing Cell: ", cellPos)
 	collapse(wave, tileWeights, cellPos)
+	
+	# TODO build partial constraint
 		
-	# step 4: propagate collapse
+	# TODO step 4: propagate collapse
+	
+	# TODO loop this, handle logic for "iteration"
 	
 ###
 # Selects a tile at random from the cell's remaining choices using weighted 
