@@ -8,23 +8,24 @@ const DIRECTIONS : Array = [LEFT, RIGHT, DOWN, UP]
 const EMPTY_TILE := Vector2i(-1,-1)
 const LAYER_ZERO := 0
 
-var BOUNDS_X : int
-var BOUNDS_Y : int
+var mapWidth : int
+var mapHeight : int
 @onready
 var inputMap = $InputMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	# Acquire Wave Function Collapse Inputs
-	var waveSize = getWaveSize(inputMap)
-	var parseResults = parseInputTileMap(inputMap)
+	var mapBounds = getMapBounds2D(inputMap)
+	var waveSize = mapBounds["width"] * mapBounds["height"]
+	var parseResults = parseInputTileMap(inputMap, mapBounds)
 	var tileFrequencies = parseResults.get("tilesToFrequencies")
 	var tileConstraints = parseResults.get("tilesToConstraints")
 	var tileWeights = getTileProbabilityWeights(tileFrequencies, waveSize)
 	
 	# Run Algorithm
-	var wave = initializeWave(tileConstraints, inputMap)
-	var lowestEntropyCells = processWave(wave, tileWeights)
+	var wave = initializeWave(tileConstraints, inputMap, mapBounds)
+	var lowestEntropyCells = processWave(wave, tileWeights, mapBounds)
 	
 	print(getShannonEntropyForCell(wave, tileWeights, 0))
 	
@@ -54,8 +55,7 @@ func buildPartialConstraint(collapsedCellsTileChoice: Vector2i, directionOfNeigh
 #   of constriant checking to neighboring cells. This results in the wave's entropy (available choices 
 #   for each cell) lowering any time a new cell is collapsed.
 ###
-func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Variant):
-	
+func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Variant, mapBounds: Dictionary):
 	# base case 1: a propagation call has resulted in a contradiction
 	if(wave == -1):
 		return wave
@@ -69,7 +69,6 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 		# actual logic of removing constraints, updating wave
 		var tileChoicesToKeep = []
 		
-		#TODO verify this is correct behavior #probably need to do remainingTileChoices[tile]
 		for tile in remainingTileChoices.keys():
 			var constraint = partialConstraint.duplicate(true);
 			constraint["local"] = tile
@@ -87,9 +86,26 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 		# recursion case 1: a new cell has been collapsed
 		if(tileChoicesToKeep.size() == 1):
 			wave[cellToPropagatePos] = tileChoicesToKeep[0]
-			# TODO implement bounds checks
-			# TODO Propagate the collapse in the form of passing a new partialConstraint to neighbors
-			#  in each direction that is not out of bounds.	
+			var pos2D = idx1DToidx2D(cellToPropagatePos, mapBounds.width, mapBounds.height)
+			var neighbors2d = getNeighborCoordinates2D(pos2D)
+			var neighbors1d = getNeighborCoordinates1D(pos2D, mapBounds.width)
+			
+			### continue propagating as long as within tileMap bounds and contradiction not reached
+			if wave != -1 and isWithinBounds(neighbors2d["left"], pos2D):
+				partialConstraint = buildPartialConstraint(pos2D, LEFT)
+				wave = propagate(wave, neighbors1d["left"], partialConstraint, mapBounds)
+		
+			if wave != -1 and isWithinBounds(neighbors2d["right"], pos2D):
+				partialConstraint = buildPartialConstraint(pos2D, RIGHT)
+				wave = propagate(wave, neighbors1d["right"], partialConstraint, mapBounds)
+	
+			if wave != -1 and isWithinBounds(neighbors2d["up"], pos2D):
+				partialConstraint = buildPartialConstraint(pos2D, UP)
+				wave = propagate(wave, neighbors1d["up"], partialConstraint, mapBounds)
+	
+			if wave != -1 and isWithinBounds(neighbors2d["down"], pos2D):
+				partialConstraint = buildPartialConstraint(pos2D, DOWN)
+				wave = propagate(wave, neighbors1d["down"], partialConstraint, mapBounds)
 	else:
 		assert(false, "An unexpected error occurred during propagation")
 
@@ -98,13 +114,51 @@ func getWaveSize(map: TileMap) -> int:
 	var mapWidth = rect.size.x
 	var mapHeight = rect.size.y 
 	return mapWidth * mapHeight
-	
-func parseInputTileMap(map : TileMap):
-	var tilesToConstraints : Dictionary 
-	var tilesToFrequency : Dictionary = {} # the number of times each tile type (atlasCoords) appears on the map
+
+func getMapBounds2D(map: TileMap) -> Dictionary:
 	var rect = map.get_used_rect()
 	var mapWidth = rect.size.x
 	var mapHeight = rect.size.y 
+	return { "width": mapWidth, "height": mapHeight }
+
+###
+# Returns a record containing the neighboring coordinate positions relative to the position passsed.
+# Does not check if they are valid coordinates, use isWithin Bounds for that.
+###
+func getNeighborCoordinates2D(pos : Vector2i) -> Dictionary:
+	return { "left": pos + LEFT, "right": pos + RIGHT, "up": pos + UP, "down": pos + DOWN }
+
+func getNeighborCoordinates1D(pos: Vector2i, mapWidth : int) -> Dictionary:
+	var neighbors2d = getNeighborCoordinates2D(pos)
+	var nLeft := idx2DToIdx1D(neighbors2d.left.x, neighbors2d.left.y, mapWidth)
+	var nRight :=  idx2DToIdx1D(neighbors2d.right.x, neighbors2d.right.y, mapWidth)
+	var nUp :=  idx2DToIdx1D(neighbors2d.up.x, neighbors2d.up.y, mapWidth)
+	var nDown :=  idx2DToIdx1D(neighbors2d.down.x, neighbors2d.down.y, mapWidth)
+	
+	return { "left": nLeft, "right": nRight, "up": nUp, "down": nDown }
+
+	
+
+#TODO should make this soft constraint of: sample tile maps lower bound of 0 in either dir, a hard one somehow, this will only work if filled cells start at 0,0
+###
+# Returns true if coordinate is within the bounds of wave (output tile map), false otherwise
+###
+func isWithinBounds(pos2D : Vector2i, mapBounds : Dictionary) -> bool:
+	var LOWER_BOUNDS_XY = -1
+	var UPPER_BOUNDS_X = mapBounds["width"]
+	var UPPER_BOUNDS_Y = mapBounds["height"]
+	
+	if pos2D.x <= LOWER_BOUNDS_XY or pos2D.x >= UPPER_BOUNDS_X:
+		return false
+	if pos2D.y <= LOWER_BOUNDS_XY or pos2D.y >= UPPER_BOUNDS_Y:
+		return false
+	return true
+	
+func parseInputTileMap(map : TileMap, mapBounds: Dictionary):
+	var tilesToConstraints : Dictionary 
+	var tilesToFrequency : Dictionary = {} # the number of times each tile type (atlasCoords) appears on the map
+	var mapWidth = mapBounds["width"]
+	var mapHeight = mapBounds["height"]
 	
 	#TODO could speed this up by iterating as a 1D array
 	for x in mapWidth: # width
@@ -150,10 +204,9 @@ func calculateCoefficient(numTileTypesUsed: int):
 	print("Coefficient is:", coefficient)
 	return coefficient
 
-func initializeWave(tilesToConstraints: Dictionary, inputMap: TileMap):
-	var rect = inputMap.get_used_rect()
-	var mapWidth = rect.size.x
-	var mapHeight = rect.size.y 
+func initializeWave(tilesToConstraints: Dictionary, inputMap: TileMap, mapBounds: Dictionary):
+	var mapWidth = mapBounds["width"]
+	var mapHeight = mapBounds["height"]
 	
 	var wave = createMatrix(mapWidth, mapHeight)
 	var matrixCoefficient = calculateCoefficient(tilesToConstraints.size())
@@ -170,11 +223,11 @@ func idx2DToIdx1D(x: int, y: int, width: int) -> int:
 	var index = (x * width) + y
 	return index
 
-##### understand how 1d to 2d conversion works
 func idx1DToidx2D(i: int, width: int, height: int) -> Vector2i:
 	var x : int = floor(i / width)
 	var y : int = i % width
 	return Vector2i(x, y)
+	
 ###
 # Returns an array of tileId -> weight kvps, sorted by frequency (highest weight) in descending order
 ###
@@ -219,6 +272,9 @@ func getLowestEntropyCells(wave: Array, tileWeights: Array) -> Array:
 		# what if start of process
 	var lowestEntropyCells = []
 	for i in wave.size():
+		# if element in wave is a VECTOR2i and not a Dictionary, it is already collapsed and should be skipped
+		if (typeof(wave[i]) == TYPE_VECTOR2I):
+			continue
 		var cell = { "wavePos": i, "entropy": getShannonEntropyForCell(wave, tileWeights, i) }
 		if lowestEntropyCells.size() == 0:
 			lowestEntropyCells.append(cell)
@@ -235,29 +291,65 @@ func getLowestEntropyCells(wave: Array, tileWeights: Array) -> Array:
 	
 # Collapses the entire wave function (tile matrix), and returns either the resulting array, or the contradiction value: -1
 # A contradiction means we've hit a point where not all cells can be collapsed into a valid layout, and thus the wave collapsing must begin anew
-func processWave(wave: Array, tileWeights: Array):
+func processWave(wave: Variant, tileWeights: Array, mapBounds: Dictionary):
+	var isWaveFunctionCollapsed := false
+	# TODO wrap this in a loop, where looping ends when wave = -1 or wave function completed collapsed
 	# step 1: collect cells with lowest entropy
 	var lowestEntropyCells = getLowestEntropyCells(wave, tileWeights)
 	if lowestEntropyCells.size() == 0:
-		# done collapsing
+		# END CONDITION: Collapsing all elements successful and finished.
 		return wave;
 		
-	# step 2: select one at random
+	# step 2: select a cell from those of the lowest entropy at random
 	var selectIdx = randi() % lowestEntropyCells.size()
-	var cellPos = lowestEntropyCells[selectIdx]["wavePos"]
+	var cellPos : int = lowestEntropyCells[selectIdx]["wavePos"]
 	# after selecting, reset lowestEntropyCells for next loop
 	lowestEntropyCells = []
 	
 	# step 3: collapse that cell
 	print("Collapsing Cell: ", cellPos)
-	collapse(wave, tileWeights, cellPos)
+	var tileSelection = collapse(wave, tileWeights, cellPos)
+	if	tileSelection == -1:
+		#TODO break once looping	   
+		print("break, contraditiction found")
+	wave[cellPos] = tileSelection 
 	
-	# TODO build partial constraint
+	var pos2d = idx1DToidx2D(cellPos, mapBounds.width, mapBounds.height)
+	var neighbors2d := getNeighborCoordinates2D(pos2d)
+	var neighbors1d := getNeighborCoordinates1D(pos2d, mapBounds.width)
+	
+	# Propagate collapse information as constraints to check, where appropriate
+	if wave != -1 and isWithinBounds(neighbors2d["left"], pos2d):
+		var partialConstraint = buildPartialConstraint(pos2d, LEFT)
+		wave = propagate(wave, neighbors1d["left"], partialConstraint, mapBounds)
 		
-	# TODO step 4: propagate collapse
+	if wave != -1 and isWithinBounds(neighbors2d["right"], pos2d):
+		var partialConstraint = buildPartialConstraint(pos2d, RIGHT)
+		wave = propagate(wave, neighbors1d["right"], partialConstraint, mapBounds)
+	
+	if wave != -1 and isWithinBounds(neighbors2d["up"], pos2d):
+		var partialConstraint = buildPartialConstraint(pos2d, UP)
+		wave = propagate(wave, neighbors1d["up"], partialConstraint, mapBounds)
+	
+	if wave != -1 and isWithinBounds(neighbors2d["down"], pos2d):
+		var partialConstraint = buildPartialConstraint(pos2d, DOWN)
+		wave = propagate(wave, neighbors1d["down"], partialConstraint, mapBounds)
+	
+	if wave == -1:
+		print("Contradiction reached")
+		return -1
+
+	
+	
+	
+	# TODO implement a check bounds function
+	# TODO step 4: propagate collapse in each neighboring direction, checking bounds
+	#func buildPartialConstraint(collapsedCellsTileChoice: Vector2i, directionOfNeighbor: Vector2i):
+	#return { "allowed": collapsedCellsTileChoice, "direction": invertDirection(directionOfNeighbor)}
+	
 	
 	# TODO loop this, handle logic for "iteration"
-	
+
 ###
 # Selects a tile at random from the cell's remaining choices using weighted 
 # randomness based on frequency of tiles as they appeared in the input map. Returns 
@@ -265,14 +357,14 @@ func processWave(wave: Array, tileWeights: Array):
 ###
 func collapse(wave: Array, tileWeights: Array, cellPos: int):
 	var availableTileChoices : Array = wave[cellPos].keys()
-	var selection = 0
+	var selection = -1
 	
 	# No choices available, contradiction reached
 	if availableTileChoices.size() == 0:
-		return 0
+		return selection
 	
 	# Create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them
-	# This creates an array weights for the remaining choices that is still ordered most to least frequent
+	# This creates an array of weights for the remaining choices that is still ordered most to least frequent
 	var tileWeightsRemainingChoices = tileWeights.duplicate()
 	var remainingChoicesWeightSum : float = 0
 	for record in tileWeightsRemainingChoices:
@@ -295,5 +387,5 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 			break			
 		i += 1
 		
-	assert(selection != 0, "No tile was selected after iterating through choices")
+	assert(selection != -1, "Unexpected error: No tile was selected after iterating through choices")
 	return selection
