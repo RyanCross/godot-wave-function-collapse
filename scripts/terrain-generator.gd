@@ -91,7 +91,8 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 			return wave
 		# recursion case 1: a new cell has been collapsed
 		if(wave[cellToPropagatePos].size() == 1):
-			var collapsedCellTile = tileChoicesToKeep.keys()[0] # get the tile atlas coords of the remaining tileToConstraint dict
+			var collapsedCellTile = tileChoicesToKeep.keys()[0] # get the tile atlas coords of the remaining tileToConstraint dict 
+			print(cellToPropagatePos, " collapsed through propagation")
 			wave[cellToPropagatePos] = collapsedCellTile
 			var pos2D = idx1DToidx2D(cellToPropagatePos, mapBounds.width)
 			var neighbors2d = getNeighborCoordinates2D(pos2D)
@@ -374,22 +375,25 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 	
 	# Create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them
 	# This creates an array of weights for the remaining choices that is still ordered most to least frequent
-	var tileWeightsRemainingChoices = tileWeights.duplicate()
+	var availableChoicesWeights = []
 	var remainingChoicesWeightSum : float = 0
-	for record in tileWeightsRemainingChoices:
-		if availableTileChoices.find(record["tile"]) == -1:
-			tileWeightsRemainingChoices.erase(record)
-		else:
-			remainingChoicesWeightSum += record["weight"]
-
+	
+	# get tileWeights sort afterwards
+	for record in tileWeights:
+		if availableTileChoices.find(record["tile"]) != -1:
+			availableChoicesWeights.append(record)
+			remainingChoicesWeightSum += snappedf(record["weight"], .01)
+	
+	availableChoicesWeights.sort_custom(func(a, b): return a["weight"] > b["weight"])
+			
 	# Bound the limit of the random value the sum of the remaining choices
 	var rval = randf_range(0, remainingChoicesWeightSum)
 	var weightSum = 0;
 	var i = 0;
 	rval = 1
-	for record in tileWeightsRemainingChoices:
+	for record in availableChoicesWeights:
 		weightSum += record["weight"]
-		if rval < weightSum or (rval <= weightSum and i == tileWeightsRemainingChoices.size() - 1): # weightSum is inclusive if last element
+		if rval < weightSum or (rval <= weightSum and i == availableChoicesWeights.size() - 1): # weightSum is inclusive if last element
 			var choiceIdx = availableTileChoices.find(record["tile"]) 
 			assert(choiceIdx != -1, "Selected tile choice not found in available selection during collapse")
 			selection = availableTileChoices[choiceIdx]
