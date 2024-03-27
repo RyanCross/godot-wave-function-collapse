@@ -376,24 +376,23 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 	# Create a copy of tileWeights, find all entries that are not present in tileChoices for the cell and remove them
 	# This creates an array of weights for the remaining choices that is still ordered most to least frequent
 	var availableChoicesWeights = []
-	var remainingChoicesWeightSum : float = 0
+	var choicesWeightSum : float = 0
 	
 	# get tileWeights sort afterwards
 	for record in tileWeights:
 		if availableTileChoices.find(record["tile"]) != -1:
 			availableChoicesWeights.append(record)
-			remainingChoicesWeightSum += snappedf(record["weight"], .01)
+			choicesWeightSum += snappedf(record["weight"], .01)
 	
 	availableChoicesWeights.sort_custom(func(a, b): return a["weight"] > b["weight"])
 			
 	# Bound the limit of the random value the sum of the remaining choices
-	var rval = randf_range(0, remainingChoicesWeightSum)
-	var weightSum = 0;
+	var rval : float = randf_range(0, choicesWeightSum)
+	var weightSum : float = 0;
 	var i = 0;
-	rval = 1
 	for record in availableChoicesWeights:
 		weightSum += record["weight"]
-		if rval < weightSum or (rval <= weightSum and i == availableChoicesWeights.size() - 1): # weightSum is inclusive if last element
+		if rval <= weightSum: # weightSum is inclusive if last element
 			var choiceIdx = availableTileChoices.find(record["tile"]) 
 			assert(choiceIdx != -1, "Selected tile choice not found in available selection during collapse")
 			selection = availableTileChoices[choiceIdx]
