@@ -57,7 +57,7 @@ func buildPartialConstraint(collapsedCellsTileChoice: Vector2i, directionOfNeigh
 ###
 func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Variant, mapBounds: Dictionary):
 	# base case 1: a propagation call has resulted in a contradiction
-	if(wave == -1):
+	if typeof(wave) == TYPE_INT and wave == -1:
 		return wave
 	
 	var remainingTileChoices = wave[cellToPropagatePos]
@@ -74,7 +74,7 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 			constraint["local"] = tile
 			# if allow rule (constraint) is not present, then this tile choice is now invalid
 			if(remainingTileChoices[tile].has(constraint)):
-				tileChoicesToKeep.append(remainingTileChoices[tile])
+				tileChoicesToKeep.append(tile)
 		
 		# base case 3: there are no options left for this cell, contradiction reached.
 		if(tileChoicesToKeep.size() == 0):
@@ -85,26 +85,27 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 			return wave
 		# recursion case 1: a new cell has been collapsed
 		if(tileChoicesToKeep.size() == 1):
-			wave[cellToPropagatePos] = tileChoicesToKeep[0]
-			var pos2D = idx1DToidx2D(cellToPropagatePos, mapBounds.width, mapBounds.height)
+			var collapsedCellTile = tileChoicesToKeep[0]
+			wave[cellToPropagatePos] = collapsedCellTile
+			var pos2D = idx1DToidx2D(cellToPropagatePos, mapBounds.width)
 			var neighbors2d = getNeighborCoordinates2D(pos2D)
 			var neighbors1d = getNeighborCoordinates1D(pos2D, mapBounds.width)
 			
 			### continue propagating as long as within tileMap bounds and contradiction not reached
-			if wave != -1 and isWithinBounds(neighbors2d["left"], pos2D):
-				partialConstraint = buildPartialConstraint(pos2D, LEFT)
+			if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["left"], mapBounds):
+				partialConstraint = buildPartialConstraint(collapsedCellTile, LEFT)
 				wave = propagate(wave, neighbors1d["left"], partialConstraint, mapBounds)
 		
-			if wave != -1 and isWithinBounds(neighbors2d["right"], pos2D):
-				partialConstraint = buildPartialConstraint(pos2D, RIGHT)
+			if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["right"], mapBounds):
+				partialConstraint = buildPartialConstraint(collapsedCellTile, RIGHT)
 				wave = propagate(wave, neighbors1d["right"], partialConstraint, mapBounds)
 	
-			if wave != -1 and isWithinBounds(neighbors2d["up"], pos2D):
-				partialConstraint = buildPartialConstraint(pos2D, UP)
+			if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["up"], mapBounds):
+				partialConstraint = buildPartialConstraint(collapsedCellTile, UP)
 				wave = propagate(wave, neighbors1d["up"], partialConstraint, mapBounds)
 	
-			if wave != -1 and isWithinBounds(neighbors2d["down"], pos2D):
-				partialConstraint = buildPartialConstraint(pos2D, DOWN)
+			if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["down"], mapBounds):
+				partialConstraint = buildPartialConstraint(collapsedCellTile, DOWN)
 				wave = propagate(wave, neighbors1d["down"], partialConstraint, mapBounds)
 	else:
 		assert(false, "An unexpected error occurred during propagation")
@@ -166,7 +167,7 @@ func parseInputTileMap(map : TileMap, mapBounds: Dictionary):
 
 			var tileId = map.get_cell_atlas_coords(LAYER_ZERO, Vector2i(x,y))
 			var i1D = idx2DToIdx1D(x, y, mapWidth)
-			var i2D = idx1DToidx2D(i1D, mapWidth, mapHeight)
+			var i2D = idx1DToidx2D(i1D, mapWidth)
 			
 			# record frequency
 			if tilesToFrequency.has(tileId):
@@ -220,12 +221,12 @@ func createMatrix(width: int, height: int) -> Array[Variant]:
 	return matrix
 
 func idx2DToIdx1D(x: int, y: int, width: int) -> int:
-	var index = (x * width) + y
+	var index = (y * width) + x
 	return index
 
-func idx1DToidx2D(i: int, width: int, height: int) -> Vector2i:
-	var x : int = floor(i / width)
-	var y : int = i % width
+func idx1DToidx2D(i: int, width: int) -> Vector2i:
+	var x : int = i % width
+	var y : int = floor(i / width)
 	return Vector2i(x, y)
 	
 ###
@@ -308,34 +309,34 @@ func processWave(wave: Variant, tileWeights: Array, mapBounds: Dictionary):
 	
 	# step 3: collapse that cell
 	print("Collapsing Cell: ", cellPos)
-	var tileSelection = collapse(wave, tileWeights, cellPos)
-	if	tileSelection == -1:
+	var tileSelection : Variant = collapse(wave, tileWeights, cellPos)
+	if	typeof(tileSelection) == TYPE_INT and tileSelection == -1:
 		#TODO break once looping	   
 		print("break, contraditiction found")
-	wave[cellPos] = tileSelection 
 	
-	var pos2d = idx1DToidx2D(cellPos, mapBounds.width, mapBounds.height)
+	wave[cellPos] = tileSelection 
+	var pos2d = idx1DToidx2D(cellPos, mapBounds.width)
 	var neighbors2d := getNeighborCoordinates2D(pos2d)
 	var neighbors1d := getNeighborCoordinates1D(pos2d, mapBounds.width)
 	
 	# Propagate collapse information as constraints to check, where appropriate
-	if wave != -1 and isWithinBounds(neighbors2d["left"], pos2d):
-		var partialConstraint = buildPartialConstraint(pos2d, LEFT)
+	if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["left"], mapBounds):
+		var partialConstraint = buildPartialConstraint(tileSelection, LEFT)
 		wave = propagate(wave, neighbors1d["left"], partialConstraint, mapBounds)
 		
-	if wave != -1 and isWithinBounds(neighbors2d["right"], pos2d):
-		var partialConstraint = buildPartialConstraint(pos2d, RIGHT)
+	if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["right"], mapBounds):
+		var partialConstraint = buildPartialConstraint(tileSelection, RIGHT)
 		wave = propagate(wave, neighbors1d["right"], partialConstraint, mapBounds)
 	
-	if wave != -1 and isWithinBounds(neighbors2d["up"], pos2d):
-		var partialConstraint = buildPartialConstraint(pos2d, UP)
+	if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["up"], mapBounds):
+		var partialConstraint = buildPartialConstraint(tileSelection, UP)
 		wave = propagate(wave, neighbors1d["up"], partialConstraint, mapBounds)
 	
-	if wave != -1 and isWithinBounds(neighbors2d["down"], pos2d):
-		var partialConstraint = buildPartialConstraint(pos2d, DOWN)
+	if typeof(wave) != TYPE_INT and isWithinBounds(neighbors2d["down"], mapBounds):
+		var partialConstraint = buildPartialConstraint(tileSelection, DOWN)
 		wave = propagate(wave, neighbors1d["down"], partialConstraint, mapBounds)
 	
-	if wave == -1:
+	if typeof(wave) == TYPE_INT:
 		print("Contradiction reached")
 		return -1
 
@@ -387,5 +388,5 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 			break			
 		i += 1
 		
-	assert(selection != -1, "Unexpected error: No tile was selected after iterating through choices")
+
 	return selection
