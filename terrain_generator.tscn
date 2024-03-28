@@ -1,18 +1,21 @@
-[gd_scene load_steps=4 format=3 uid="uid://qavjqxgfoxn7"]
+[gd_scene load_steps=5 format=3 uid="uid://qavjqxgfoxn7"]
 
 [ext_resource type="Script" path="res://scripts/terrain-generator.gd" id="1_ec7u0"]
 [ext_resource type="TileSet" uid="uid://dru5xtrdc4fjm" path="res://resources/roguelikeTileSet.tres" id="1_yvkr3"]
+[ext_resource type="Script" path="res://display.gd" id="2_0km41"]
 [ext_resource type="Script" path="res://scripts/InputTileMap.gd" id="2_e4yp6"]
 
 [node name="TerrainGenerator" type="Node2D"]
 script = ExtResource("1_ec7u0")
 
-[node name="Camera2D" type="Camera2D" parent="."]
-position = Vector2(196, 167)
-zoom = Vector2(2.949, 2.949)
+[node name="Camera2D" type="Camera2D" parent="." node_paths=PackedStringArray("tilemap")]
+anchor_mode = 0
+zoom = Vector2(3.01, 3.025)
+script = ExtResource("2_0km41")
+tilemap = NodePath("../InputMap")
 
 [node name="InputMap" type="TileMap" parent="."]
-position = Vector2(32, 80)
+position = Vector2(1.90735e-06, 1.86265e-09)
 rotation = 0.000784778
 tile_set = ExtResource("1_yvkr3")
 format = 2

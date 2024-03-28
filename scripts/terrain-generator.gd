@@ -29,8 +29,26 @@ func _ready():
 		print("Contradiction reached, retrying...")
 		wave = waveFunctionCollapse(tileWeights, tileConstraints, inputMap, mapBounds)
 		
-	### todo set up a timeout function
+	### TODO set up a timeout function
 	print(wave)
+	
+	### TODO create output map
+	### TODO hide input map
+	### TODO draw output map (maybe slowly for visual flair)
+	### TODO add regenerate button
+
+###
+# Creates a map to draw the output of the wave function, containing the same tileset and drawn in the same position
+###
+func createOutputMap(wave: Array, inputMap: TileMap):
+	# TODO
+	# get tileset from input map
+	# set position to 0,0
+	var outputMap : TileMap
+	outputMap.set_position(Vector2i(0,0))
+	outputMap.set_tileset(inputMap.get_tileset())
+
+
 	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
