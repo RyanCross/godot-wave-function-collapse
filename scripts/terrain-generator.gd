@@ -31,6 +31,14 @@ func _ready():
 		
 	### TODO set up a timeout function
 	print(wave)
+	await get_tree().create_timer(2.0).timeout
+	
+	var outputMap : TileMap = createOutputMap(inputMap)
+	inputMap.set_visible(false)
+	await add_child(outputMap)
+	drawMap(wave, outputMap, mapBounds)
+	
+	
 	
 	### TODO create output map
 	### TODO hide input map
@@ -40,14 +48,24 @@ func _ready():
 ###
 # Creates a map to draw the output of the wave function, containing the same tileset and drawn in the same position
 ###
-func createOutputMap(wave: Array, inputMap: TileMap):
+func createOutputMap(inputMap: TileMap) -> TileMap:
 	# TODO
 	# get tileset from input map
 	# set position to 0,0
-	var outputMap : TileMap
+	var outputMap : TileMap = TileMap.new()
 	outputMap.set_position(Vector2i(0,0))
 	outputMap.set_tileset(inputMap.get_tileset())
+	
+	return outputMap
 
+func drawMap(wave: Array, outputMap: TileMap, mapBounds: Dictionary): 
+	for i in wave.size():
+		await get_tree().create_timer(.01).timeout
+		var tileAtlasCoords : Vector2i = wave[i]
+		var cellPosition = idx1DToidx2D(i, mapBounds.width)
+		outputMap.set_cell(LAYER_ZERO, cellPosition, 0, tileAtlasCoords)
+		
+	
 
 	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
