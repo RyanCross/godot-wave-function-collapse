@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3 uid="uid://cn6osyejv10k3"]
+
+[ext_resource type="PackedScene" uid="uid://qavjqxgfoxn7" path="res://terrain_generator.tscn" id="1_5aw4v"]
+
+[node name="Demo" type="Node2D"]
+
+[node name="Control" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TerrainGenerator" parent="." node_paths=PackedStringArray("inputMap") instance=ExtResource("1_5aw4v")]
+inputMap = NodePath("")

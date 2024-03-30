@@ -8,13 +8,20 @@ const DIRECTIONS : Array = [LEFT, RIGHT, DOWN, UP]
 const EMPTY_TILE := Vector2i(-1,-1)
 const LAYER_ZERO := 0
 
+@export
+var inputMap : TileMap
+@export
+var seed : String
+@export
+var useSeed : bool = false
+
 var mapWidth : int
 var mapHeight : int
-@onready
-var inputMap = $InputMap
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
+
+	var rng = setupRandomness(useSeed, seed)
 	# Acquire Wave Function Collapse Inputs
 	var mapBounds = getMapBounds2D(inputMap)
 	var waveSize = mapBounds["width"] * mapBounds["height"]
@@ -24,26 +31,35 @@ func _ready():
 	var tileWeights = getTileProbabilityWeights(tileFrequencies, waveSize)
 	
 	# Run Algorithm
-	var wave = waveFunctionCollapse(tileWeights, tileConstraints, inputMap, mapBounds)
+	var wave = waveFunctionCollapse(tileWeights, tileConstraints, inputMap, mapBounds, rng)
 	while(typeof(wave) == TYPE_INT and wave == -1):
 		print("Contradiction reached, retrying...")
-		wave = waveFunctionCollapse(tileWeights, tileConstraints, inputMap, mapBounds)
+		wave = waveFunctionCollapse(tileWeights, tileConstraints, inputMap, mapBounds, rng)
 		
 	### TODO set up a timeout function
+	### TODO replay functiion for capturing good outputs
 	print(wave)
 	await get_tree().create_timer(2.0).timeout
 	
+	# Display Results Logic
 	var outputMap : TileMap = createOutputMap(inputMap)
 	inputMap.set_visible(false)
 	await add_child(outputMap)
 	drawMap(wave, outputMap, mapBounds)
+
+func setupRandomness(useSeed: bool, seed: String) -> RandomNumberGenerator:
+	var rng = RandomNumberGenerator.new()
 	
+	if useSeed:	
+		if seed.is_empty():
+			print("No seed supplied, using default seed")
+			seed = "test"
+		print("Seed: ", seed)
+		rng.seed = hash(seed)
+	else:
+		rng.randomize()
 	
-	
-	### TODO create output map
-	### TODO hide input map
-	### TODO draw output map (maybe slowly for visual flair)
-	### TODO add regenerate button
+	return rng
 
 ###
 # Creates a map to draw the output of the wave function, containing the same tileset and drawn in the same position
@@ -60,6 +76,7 @@ func createOutputMap(inputMap: TileMap) -> TileMap:
 
 func drawMap(wave: Array, outputMap: TileMap, mapBounds: Dictionary): 
 	for i in wave.size():
+		# wait to make the generation look nice
 		await get_tree().create_timer(.01).timeout
 		var tileAtlasCoords : Vector2i = wave[i]
 		var cellPosition = idx1DToidx2D(i, mapBounds.width)
@@ -67,7 +84,6 @@ func drawMap(wave: Array, outputMap: TileMap, mapBounds: Dictionary):
 		
 	
 
-	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
 	pass
@@ -120,6 +136,7 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 		
 		# base case 3: there are no options left for this cell, contradiction reached.
 		if(wave[cellToPropagatePos].size() == 0):
+			print("Contradiction reached at cell", cellToPropagatePos)
 			wave = -1
 			return wave
 		# base case 4: there is more than one option remaining, we are done propagating down this path
@@ -152,9 +169,6 @@ func propagate(wave: Variant, cellToPropagatePos: int, partialConstraint: Varian
 				wave = propagate(wave, neighbors1d["down"], partialConstraint, mapBounds)
 			
 		return wave
-		
-		
-	print("out here")
 func getWaveSize(map: TileMap) -> int:
 	var rect = map.get_used_rect()
 	var mapWidth = rect.size.x
@@ -278,11 +292,14 @@ func idx1DToidx2D(i: int, width: int) -> Vector2i:
 # Returns an array of tileId -> weight kvps, sorted by frequency (highest weight) in descending order
 ###
 func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Array:
+
 	var tileWeights = []
 	for key in tileFrequencies:
 		var value : float = tileFrequencies[key]
-		var weight : float = snappedf(value / float(waveSize), .01)
-		var tile = { "tile": key, "weight": weight }
+		var weight : float = value / float(waveSize)
+		var weightSnapped : float = snappedf(weight, .001)
+		assert(weight != 0, "weight of tile cannot be 0")
+		var tile = { "tile": key, "weight": weightSnapped }
 		tileWeights.append(tile)
 	
 	# sort weights such that highest weight is first
@@ -296,24 +313,29 @@ func getTileProbabilityWeights(tileFrequencies: Dictionary, waveSize: int) -> Ar
 ### 
 func getShannonEntropyForCell(wave: Array, tileWeights: Array, cellIdx) -> float:
 	# get the sum of weights of all remaining tile types
-	var weightSum : float
-	var weightSumLogWeights : float
+	var weightSum : float = 0
+	var weightSumLogWeights : float = 0
 	for remainingTileChoice in wave[cellIdx]:
 			var weightMapping = tileWeights.filter(
 				(func(tile): 
 					return tile["tile"] == remainingTileChoice))[0]
 			var weight = weightMapping["weight"]
 			weightSum += weight
+		#	print("weight Z:", weight)
+		#	print("log of weight: ", log(weight))
 			weightSumLogWeights += weight * log(weight)
 	
+
 	var shannon_entropy_for_cell : float = log(weightSum) - (weightSumLogWeights / weightSum)
-	#print("Cell remaining choices WeightSum", cellIdx, ": ", weightSum)
-	#print("Cell ", cellIdx, " entropy: ", shannon_entropy_for_cell)
-	
+
 	return shannon_entropy_for_cell
 
 # Get array of all lowest entropy cells
 func getLowestEntropyCells(wave: Array, tileWeights: Array) -> Array:	
+	var arr0 = wave[0]
+	var arr1 = wave[1]
+	var arr20 = wave[20]
+	var arr200 = wave [200]
 	var lowestEntropyCells = []
 	for i in wave.size():
 		# if element in wave is a VECTOR2i and not a Dictionary, it is already collapsed and should be skipped
@@ -324,18 +346,20 @@ func getLowestEntropyCells(wave: Array, tileWeights: Array) -> Array:
 			lowestEntropyCells.append(cell)
 		else:
 			var lowestEntropy : float = lowestEntropyCells.back()["entropy"]
+			#print(float(lowestEntropy))
+			#print(cell["entropy"])
 			if cell["entropy"] < lowestEntropy:
 				# new lowest entropy found, wipe array
 				lowestEntropyCells = []
 				lowestEntropyCells.append(cell)
-			elif cell["entropy"] == lowestEntropy:
+			elif float(cell["entropy"]) == float(lowestEntropy):
 				lowestEntropyCells.append(cell)
 	
 	return lowestEntropyCells
 	
 # Collapses the entire wave function (tile matrix), and returns either the resulting array, or the contradiction value: -1
 # A contradiction means we've hit a point where not all cells can be collapsed into a valid layout, and thus the wave collapsing must begin anew
-func waveFunctionCollapse(tileWeights: Array, tileConstraints: Dictionary, inputMap: TileMap, mapBounds: Dictionary):
+func waveFunctionCollapse(tileWeights: Array, tileConstraints: Dictionary, inputMap: TileMap, mapBounds: Dictionary, rng: RandomNumberGenerator):
 	var wave = initializeWave(tileConstraints, inputMap, mapBounds)
 	
 	while (typeof(wave) != TYPE_INT):
@@ -346,14 +370,14 @@ func waveFunctionCollapse(tileWeights: Array, tileConstraints: Dictionary, input
 			return wave
 			
 		# step 2: select a cell from those of the lowest entropy at random
-		var selectIdx = randi() % lowestEntropyCells.size()
+		var selectIdx = rng.randi() % lowestEntropyCells.size()
 		var cellPos : int = lowestEntropyCells[selectIdx]["wavePos"]
 		# after selecting, reset lowestEntropyCells for next loop
 		lowestEntropyCells = []
 		
 		# step 3: collapse that cell
 		print("Collapsing Cell: ", cellPos)
-		var tileSelection : Variant = collapse(wave, tileWeights, cellPos)
+		var tileSelection : Variant = collapse(wave, tileWeights, cellPos, rng)
 		if typeof(tileSelection) == TYPE_INT and tileSelection == -1:
 			print("break, contradiction found")
 			return -1;
@@ -401,7 +425,7 @@ func waveFunctionCollapse(tileWeights: Array, tileConstraints: Dictionary, input
 # randomness based on frequency of tiles as they appeared in the input map. Returns 
 # 0 if a selection could not be made due to error or reaching contradiction
 ###
-func collapse(wave: Array, tileWeights: Array, cellPos: int):
+func collapse(wave: Array, tileWeights: Array, cellPos: int, rng: RandomNumberGenerator):
 	var availableTileChoices : Array = wave[cellPos].keys()
 	var selection = -1
 	
@@ -418,12 +442,12 @@ func collapse(wave: Array, tileWeights: Array, cellPos: int):
 	for record in tileWeights:
 		if availableTileChoices.find(record["tile"]) != -1:
 			availableChoicesWeights.append(record)
-			choicesWeightSum += snappedf(record["weight"], .01)
+			choicesWeightSum += snappedf(record["weight"], .001)
 	
 	availableChoicesWeights.sort_custom(func(a, b): return a["weight"] > b["weight"])
 			
 	# Bound the limit of the random value the sum of the remaining choices
-	var rval : float = randf_range(0, choicesWeightSum)
+	var rval : float = rng.randf_range(0, choicesWeightSum)
 	var weightSum : float = 0;
 	var i = 0;
 	for record in availableChoicesWeights:

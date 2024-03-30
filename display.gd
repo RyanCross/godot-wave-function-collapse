@@ -4,9 +4,10 @@ extends Camera2D
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	set_anchor_mode(Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT)
-	var zoom_vector = get_camera_zoom_to_tilemap()
-	set_zoom(zoom_vector)
+	pass
+	#set_anchor_mode(Camera2D.ANCHOR_MODE_FIXED_TOP_LEFT)
+	#var zoom_vector = get_camera_zoom_to_tilemap()
+	#set_zoom(zoom_vector)
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
